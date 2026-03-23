@@ -3,6 +3,7 @@ from __future__ import annotations
 """Audio validation and normalization utilities for uploaded WAV files."""
 
 import logging
+import shutil
 import subprocess
 import wave
 from dataclasses import dataclass
@@ -30,6 +31,17 @@ class WavInfo:
     sample_width_bytes: int
     frame_count: int
     duration_sec: float
+
+
+@dataclass(frozen=True)
+class PreparedSttAudio:
+    """Information about the audio file that will actually be sent to STT."""
+
+    path: Path
+    sample_rate_hz: int
+    channels: int
+    sample_width_bytes: int
+    normalization_applied: bool
 
 
 def validate_upload_declared_type(filename: str | None, content_type: str | None) -> None:
@@ -106,6 +118,74 @@ def inspect_wav(path: Path, max_duration_seconds: int) -> WavInfo:
         info.duration_sec,
     )
     return info
+
+
+def ffmpeg_is_available(ffmpeg_binary: str) -> bool:
+    """Return whether the configured ffmpeg binary is available on this host."""
+    if Path(ffmpeg_binary).is_file():
+        return True
+    return shutil.which(ffmpeg_binary) is not None
+
+
+def supports_direct_stt_input(wav_info: WavInfo) -> bool:
+    """Return whether the original WAV can be used directly without conversion.
+
+    The fallback path intentionally stays conservative and only accepts the
+    format this project is designed around: mono PCM16 WAV at 8kHz or 16kHz.
+    """
+    return (
+        wav_info.channels == 1
+        and wav_info.sample_width_bytes == 2
+        and wav_info.sample_rate_hz in {8000, 16000}
+    )
+
+
+def prepare_audio_for_stt(
+    input_path: Path,
+    output_path: Path,
+    source_wav_info: WavInfo,
+    ffmpeg_binary: str,
+    enable_ffmpeg: bool,
+) -> PreparedSttAudio:
+    """Prepare the audio file for STT.
+
+    If `ffmpeg` is enabled and available, the audio is normalized to mono
+    16kHz PCM16. Otherwise, a compatible source WAV is used directly.
+    """
+    if enable_ffmpeg and ffmpeg_is_available(ffmpeg_binary):
+        normalize_audio_for_stt(input_path=input_path, output_path=output_path, ffmpeg_binary=ffmpeg_binary)
+        return PreparedSttAudio(
+            path=output_path,
+            sample_rate_hz=16000,
+            channels=1,
+            sample_width_bytes=2,
+            normalization_applied=True,
+        )
+
+    if supports_direct_stt_input(source_wav_info):
+        reason = "ffmpeg disabled by configuration" if not enable_ffmpeg else "ffmpeg not available"
+        logger.warning(
+            "audio.prepare_audio_for_stt %s; using original WAV directly input=%s sample_rate_hz=%s channels=%s sample_width_bytes=%s",
+            reason,
+            input_path,
+            source_wav_info.sample_rate_hz,
+            source_wav_info.channels,
+            source_wav_info.sample_width_bytes,
+        )
+        return PreparedSttAudio(
+            path=input_path,
+            sample_rate_hz=source_wav_info.sample_rate_hz,
+            channels=source_wav_info.channels,
+            sample_width_bytes=source_wav_info.sample_width_bytes,
+            normalization_applied=False,
+        )
+
+    reason = "ffmpeg is disabled" if not enable_ffmpeg else "ffmpeg is not available"
+    raise ProcessingError(
+        "audio_normalization_unavailable",
+        f"{reason} and the uploaded WAV cannot be sent directly to STT. "
+        "Provide mono PCM16 WAV at 8kHz or 16kHz, or install ffmpeg.",
+    )
 
 
 def normalize_audio_for_stt(input_path: Path, output_path: Path, ffmpeg_binary: str) -> None:

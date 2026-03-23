@@ -5,7 +5,6 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
-import shutil
 import tempfile
 import uuid
 from functools import lru_cache
@@ -18,7 +17,7 @@ from fastapi import Depends, FastAPI, File, Form, Request, UploadFile
 from fastapi.responses import JSONResponse
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 
-from app.audio import inspect_wav, normalize_audio_for_stt, validate_upload_declared_type
+from app.audio import ffmpeg_is_available, inspect_wav, prepare_audio_for_stt, validate_upload_declared_type
 from app.classifier import ClassificationService
 from app.config import Settings, get_settings
 from app.errors import APIError, FileTooLargeError, InvalidInputError, ProcessingError, UnauthorizedError
@@ -48,27 +47,32 @@ def _verbose_ai_logs_enabled(settings: Settings | None = None) -> bool:
     return resolved_settings.verbose_ai_logs
 
 
-def _ffmpeg_is_available(ffmpeg_binary: str) -> bool:
-    """Check whether configured ffmpeg binary is available."""
-    if Path(ffmpeg_binary).is_file():
-        return True
-    return shutil.which(ffmpeg_binary) is not None
-
-
 def _validate_startup_requirements(settings: Settings) -> None:
     """Fail fast if critical runtime dependencies are missing or invalid."""
     logger.info("main._validate_startup_requirements started")
     if not settings.api_bearer_token.strip():
         raise RuntimeError("API_BEARER_TOKEN must be set and non-empty")
-    if not _ffmpeg_is_available(settings.ffmpeg_binary):
-        raise RuntimeError(f"ffmpeg binary not found: {settings.ffmpeg_binary}")
+    ffmpeg_available = settings.enable_ffmpeg and ffmpeg_is_available(settings.ffmpeg_binary)
+    if not settings.enable_ffmpeg:
+        logger.warning(
+            "main._validate_startup_requirements ffmpeg disabled by configuration ENABLE_FFMPEG=false; compatible WAV files will be sent to STT without normalization"
+        )
+    elif ffmpeg_available:
+        logger.info("main._validate_startup_requirements ffmpeg available binary=%s", settings.ffmpeg_binary)
+    else:
+        logger.warning(
+            "main._validate_startup_requirements ffmpeg not found binary=%s; compatible WAV files will be sent to STT without normalization",
+            settings.ffmpeg_binary,
+        )
     taxonomy = load_taxonomy(settings.taxonomy_file)
     logger.info(
-        "main._validate_startup_requirements completed taxonomy_version=%s taxonomy_categories=%s stt_languages=%s max_concurrent_calls=%s",
+        "main._validate_startup_requirements completed taxonomy_version=%s taxonomy_categories=%s stt_languages=%s max_concurrent_calls=%s ffmpeg_enabled=%s ffmpeg_available=%s",
         taxonomy.version,
         len(taxonomy.categories),
         settings.stt_languages,
         settings.max_concurrent_calls,
+        settings.enable_ffmpeg,
+        ffmpeg_available,
     )
 
 
@@ -321,7 +325,7 @@ async def process_call(
     Pipeline:
     1. Validate metadata and upload constraints.
     2. Save uploaded file to temporary workspace.
-    3. Inspect and normalize audio for STT.
+    3. Inspect audio and normalize when ffmpeg is available.
     4. Transcribe with Azure Speech.
     5. Classify transcript with Azure OpenAI.
     6. Return structured JSON payload with timings.
@@ -376,25 +380,40 @@ async def process_call(
                 logger.info("main.process_call wav_info call_id=%s wav_info=%s", resolved_call_id, wav_info)
 
                 normalize_started = perf_counter()
-                logger.info("main.process_call step=normalize_audio call_id=%s", resolved_call_id)
-                await run_in_threadpool(
-                    normalize_audio_for_stt,
+                logger.info("main.process_call step=prepare_audio_for_stt call_id=%s", resolved_call_id)
+                stt_audio = await run_in_threadpool(
+                    prepare_audio_for_stt,
                     input_path=input_path,
                     output_path=normalized_path,
+                    source_wav_info=wav_info,
                     ffmpeg_binary=settings.ffmpeg_binary,
+                    enable_ffmpeg=settings.enable_ffmpeg,
                 )
-                normalize_ms = int((perf_counter() - normalize_started) * 1000)
-                logger.info(
-                    "main.process_call step=normalize_audio completed call_id=%s normalize_ms=%s",
-                    resolved_call_id,
-                    normalize_ms,
-                )
+                prepare_audio_elapsed_ms = int((perf_counter() - normalize_started) * 1000)
+                if stt_audio.normalization_applied:
+                    normalize_ms = prepare_audio_elapsed_ms
+                    logger.info(
+                        "main.process_call step=prepare_audio_for_stt normalized call_id=%s normalize_ms=%s stt_path=%s",
+                        resolved_call_id,
+                        normalize_ms,
+                        stt_audio.path,
+                    )
+                else:
+                    normalize_ms = 0
+                    logger.info(
+                        "main.process_call step=prepare_audio_for_stt skipped normalization call_id=%s stt_path=%s sample_rate_hz=%s channels=%s sample_width_bytes=%s",
+                        resolved_call_id,
+                        stt_audio.path,
+                        stt_audio.sample_rate_hz,
+                        stt_audio.channels,
+                        stt_audio.sample_width_bytes,
+                    )
 
                 stt_started = perf_counter()
                 logger.info("main.process_call step=stt call_id=%s", resolved_call_id)
                 transcription = await run_in_threadpool(
                     speech_service.transcribe,
-                    audio_path=normalized_path,
+                    audio_path=stt_audio.path,
                     include_segments=return_transcript_segments,
                 )
                 stt_ms = int((perf_counter() - stt_started) * 1000)
@@ -456,6 +475,9 @@ async def process_call(
                         source_sample_rate_hz=wav_info.sample_rate_hz,
                         source_channels=wav_info.channels,
                         source_sample_width_bytes=wav_info.sample_width_bytes,
+                        normalized_sample_rate_hz=stt_audio.sample_rate_hz,
+                        normalized_channels=stt_audio.channels,
+                        normalized_sample_width_bytes=stt_audio.sample_width_bytes,
                         duration_sec=wav_info.duration_sec,
                     ),
                 )

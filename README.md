@@ -3,6 +3,7 @@
 FastAPI service that accepts WAV calls via multipart upload, transcribes with Azure Speech, classifies with Azure OpenAI, and returns one JSON response.
 
 Architecture and operational notes: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
+Production deployment runbook: [docs/DEPLOYMENT_RHEL9_PROD.md](docs/DEPLOYMENT_RHEL9_PROD.md).
 
 Deployment templates:
 - `deployment/systemd/calls-category-api.service`
@@ -14,7 +15,7 @@ Deployment templates:
 
 - `POST /v1/calls/process` (multipart `file` upload)
 - WAV validation (`.wav`, PCM WAV header check, duration and size limits)
-- Audio normalization with `ffmpeg` to mono 16kHz 16-bit PCM
+- Audio normalization with `ffmpeg` to mono 16kHz 16-bit PCM when available
 - Azure Speech STT with configurable language list (`STT_LANGUAGES`, default `uk-UA`)
 - Azure OpenAI call classification from taxonomy (`categories.yaml`)
 - Strict JSON validation + one repair attempt for malformed model output
@@ -54,6 +55,7 @@ cp .env.example .env
 
 Then fill real Azure keys and token.
 `API_BEARER_TOKEN` is required; the service fails fast at startup if missing.
+`ffmpeg` is optional; if it is missing, or if `ENABLE_FFMPEG=false`, the service can still process compatible mono PCM16 WAV files directly.
 
 Note: code supports both the new env names (`AZURE_*`) and your current legacy names (`SS_*`, `GPT_*`) for compatibility.
 

@@ -57,6 +57,7 @@ class Settings(BaseSettings):
         validation_alias=AliasChoices("TAXONOMY_PATH"),
     )
     ffmpeg_binary: str = Field(default="ffmpeg", validation_alias=AliasChoices("FFMPEG_BINARY"))
+    enable_ffmpeg: bool = Field(default=True, validation_alias=AliasChoices("ENABLE_FFMPEG"))
     log_transcripts: bool = Field(default=False, validation_alias=AliasChoices("LOG_TRANSCRIPTS"))
     log_level: str = Field(default="DEBUG", validation_alias=AliasChoices("LOG_LEVEL"))
     log_file: Path = Field(default=Path("logs/calls_category_api.log"), validation_alias=AliasChoices("LOG_FILE"))

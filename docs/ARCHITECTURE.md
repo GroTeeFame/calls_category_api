@@ -9,14 +9,14 @@ This service receives WAV call recordings over HTTP, transcribes them with Azure
 - Ingestion mode: multipart upload (`POST /v1/calls/process`).
 - Storage: no Azure Storage dependency, request-scoped temp files only.
 - Languages: configurable STT auto-detection (`STT_LANGUAGES`, default `uk-UA`).
-- Audio input: WAV expected; normalized internally to mono 16kHz PCM16 before STT.
+- Audio input: WAV expected; normalized internally to mono 16kHz PCM16 before STT when `ffmpeg` is enabled and available.
 
 ## High-Level Components
 
 - `app/main.py`
   - FastAPI app, endpoint handlers, auth guard, middleware, orchestration pipeline.
 - `app/audio.py`
-  - Upload type checks, WAV header inspection, ffmpeg normalization.
+  - Upload type checks, WAV header inspection, optional ffmpeg normalization, direct-input fallback.
 - `app/speech.py`
   - Azure Speech transcription service with retries and timeout mapping.
 - `app/classifier.py`
@@ -44,7 +44,7 @@ FastAPI (main.py)
   | 2) Auth guard + request size checks + metadata parsing
   | 3) Save upload -> temp/input.wav
   | 4) inspect_wav() validation (codec/channels/rate/duration)
-  | 5) ffmpeg normalize -> temp/normalized.wav (mono 16kHz PCM16)
+  | 5) normalize with ffmpeg when enabled and available, otherwise use compatible source WAV directly
   | 6) SpeechService.transcribe()
   |      -> Azure Speech
   |      <- transcript text + optional segments + detected languages
@@ -86,8 +86,10 @@ Error shape:
 
 - Startup fail-fast checks:
   - bearer token exists
-  - ffmpeg binary available
   - taxonomy loads/validates
+- Startup warnings:
+  - if `ffmpeg` is missing, normalization is disabled and compatible WAV files are sent directly to STT
+  - if `ENABLE_FFMPEG=false`, normalization is intentionally disabled and compatible WAV files are sent directly to STT
 - Upstream retries with exponential backoff + jitter:
   - Azure Speech
   - Azure OpenAI
@@ -107,7 +109,7 @@ Core:
 Processing:
 - `MAX_UPLOAD_MB`, `MAX_DURATION_MINUTES`
 - `TAXONOMY_PATH`, `PROMPT_VERSION`
-- `FFMPEG_BINARY`, `STT_LANGUAGES`
+- `FFMPEG_BINARY` (optional), `ENABLE_FFMPEG`, `STT_LANGUAGES`
 
 Resilience:
 - `MAX_CONCURRENT_CALLS`
@@ -175,7 +177,8 @@ seq 1 10 | xargs -P 5 -I{} sh -c '
 
 ## Operational Notes for Red Hat 9
 
-- Ensure `ffmpeg` is installed and available in PATH (or set `FFMPEG_BINARY` to absolute path).
+- Primary operator runbook: `docs/DEPLOYMENT_RHEL9_PROD.md`
+- `ffmpeg` is optional but recommended for best STT quality and broader WAV compatibility.
 - Run app as non-root service account.
 - Keep `.env` readable only by service user.
 - Restrict inbound access to internal network and reverse proxy.
