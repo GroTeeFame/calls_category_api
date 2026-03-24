@@ -6,7 +6,7 @@ import json
 import logging
 import random
 import time
-from typing import Any, Literal
+from typing import Any, Literal, Optional
 
 from pydantic import BaseModel, Field, ValidationError
 
@@ -20,11 +20,11 @@ logger = logging.getLogger("calls_category_api.classifier")
 class _RawExtras(BaseModel):
     """Raw extras shape expected from the model JSON output."""
 
-    intent: str | None = None
-    sentiment: str | None = None
+    intent: Optional[str] = None
+    sentiment: Optional[str] = None
     compliance_flags: list[str] = Field(default_factory=list)
-    escalation: bool | None = None
-    summary: str | None = None
+    escalation: Optional[bool] = None
+    summary: Optional[str] = None
     evidence: list[str] = Field(default_factory=list)
     key_entities: list[str] = Field(default_factory=list)
 
@@ -36,7 +36,7 @@ class _RawClassification(BaseModel):
     caller_type_confidence: float = Field(ge=0, le=1)
     call_category: str
     call_category_confidence: float = Field(ge=0, le=1)
-    extras: _RawExtras | None = None
+    extras: Optional[_RawExtras] = None
 
 
 def _import_openai_client():
@@ -92,7 +92,7 @@ class ClassificationService:
     def classify(
         self,
         transcript: str,
-        metadata: dict[str, Any] | None,
+        metadata: Optional[dict[str, Any]],
         include_extras: bool,
     ) -> ClassificationResult:
         """Run one full classification cycle and validate strict JSON output."""
@@ -180,7 +180,7 @@ class ClassificationService:
         logger.info("classifier._create_client completed")
         return client
 
-    def _build_prompts(self, transcript: str, metadata: dict[str, Any] | None) -> tuple[str, str]:
+    def _build_prompts(self, transcript: str, metadata: Optional[dict[str, Any]]) -> tuple[str, str]:
         """Build system and user prompts with taxonomy constraints."""
         logger.info("classifier._build_prompts started")
         natural_block = self.taxonomy.prompt_block_for_caller_type("NATURAL")
@@ -295,7 +295,7 @@ class ClassificationService:
 
     def _chat_completion_with_retry(self, client, messages: list[dict[str, str]], response_format: dict[str, str], operation_name: str):
         """Execute chat completion with retry/error mapping for transient failures."""
-        last_exception: Exception | None = None
+        last_exception: Optional[Exception] = None
         for attempt in range(1, self.max_attempts + 1):
             try:
                 logger.info(
@@ -386,7 +386,7 @@ class ClassificationService:
         return min(10.0, base_delay_seconds * (2 ** (attempt - 1)) + jitter)
 
     @staticmethod
-    def _extract_status_code(exc: Exception) -> int | None:
+    def _extract_status_code(exc: Exception) -> Optional[int]:
         """Extract HTTP status code from SDK exception if present."""
         status_code = getattr(exc, "status_code", None)
         if isinstance(status_code, int):

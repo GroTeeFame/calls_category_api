@@ -177,7 +177,9 @@ seq 1 10 | xargs -P 5 -I{} sh -c '
 
 ## Operational Notes for Red Hat 9
 
-- Primary operator runbook: `docs/DEPLOYMENT_RHEL9_PROD.md`
+- Primary operator runbooks:
+  - `docs/DEPLOYMENT_RHEL9_PROD.md`
+  - `docs/DEPLOYMENT_RHEL9_MANUAL.md`
 - `ffmpeg` is optional but recommended for best STT quality and broader WAV compatibility.
 - Run app as non-root service account.
 - Keep `.env` readable only by service user.

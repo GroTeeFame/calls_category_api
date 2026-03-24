@@ -8,6 +8,7 @@ import threading
 import time
 from dataclasses import dataclass, field
 from pathlib import Path
+from typing import Optional
 
 from app.errors import ProcessingError, RateLimitError, UpstreamTimeoutError, UpstreamUnavailableError
 from app.models import TranscriptionSegment
@@ -71,7 +72,7 @@ class SpeechService:
 
     def transcribe(self, audio_path: Path, include_segments: bool) -> SpeechTranscription:
         """Run transcription with retries for transient upstream failures."""
-        last_error: Exception | None = None
+        last_error: Optional[Exception] = None
         for attempt in range(1, self.max_attempts + 1):
             try:
                 return self._transcribe_once(audio_path=audio_path, include_segments=include_segments, attempt=attempt)
@@ -149,7 +150,7 @@ class SpeechService:
             text_parts.append(text)
             start_ms = int(result.offset / 10_000)
             duration_ms = int(result.duration / 10_000)
-            language: str | None = None
+            language: Optional[str] = None
             try:
                 language = speechsdk.AutoDetectSourceLanguageResult(result).language
             except Exception:  # pragma: no cover - SDK best-effort parsing.

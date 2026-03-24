@@ -4,6 +4,7 @@ FastAPI service that accepts WAV calls via multipart upload, transcribes with Az
 
 Architecture and operational notes: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
 Production deployment runbook: [docs/DEPLOYMENT_RHEL9_PROD.md](docs/DEPLOYMENT_RHEL9_PROD.md).
+Manual production deployment runbook: [docs/DEPLOYMENT_RHEL9_MANUAL.md](docs/DEPLOYMENT_RHEL9_MANUAL.md).
 
 Deployment templates:
 - `deployment/systemd/calls-category-api.service`

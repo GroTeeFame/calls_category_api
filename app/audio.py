@@ -8,6 +8,7 @@ import subprocess
 import wave
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Optional
 
 from app.errors import InvalidInputError, ProcessingError
 
@@ -44,7 +45,7 @@ class PreparedSttAudio:
     normalization_applied: bool
 
 
-def validate_upload_declared_type(filename: str | None, content_type: str | None) -> None:
+def validate_upload_declared_type(filename: Optional[str], content_type: Optional[str]) -> None:
     """Validate declared filename extension and request MIME type.
 
     This is an early coarse filter; real file integrity is checked later by

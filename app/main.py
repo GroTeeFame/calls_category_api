@@ -10,7 +10,7 @@ import uuid
 from functools import lru_cache
 from pathlib import Path
 from time import perf_counter
-from typing import Any
+from typing import Any, Optional
 
 from fastapi.concurrency import run_in_threadpool
 from fastapi import Depends, FastAPI, File, Form, Request, UploadFile
@@ -41,7 +41,7 @@ app = FastAPI(
 )
 
 
-def _verbose_ai_logs_enabled(settings: Settings | None = None) -> bool:
+def _verbose_ai_logs_enabled(settings: Optional[Settings] = None) -> bool:
     """Return whether verbose AI payload logging is enabled."""
     resolved_settings = settings or get_settings()
     return resolved_settings.verbose_ai_logs
@@ -183,7 +183,7 @@ def get_classifier_service() -> ClassificationService:
     return _cached_classifier_service()
 
 
-def _parse_metadata(metadata_raw: str | None, call_id: str) -> dict[str, Any]:
+def _parse_metadata(metadata_raw: Optional[str], call_id: str) -> dict[str, Any]:
     """Parse optional metadata JSON string into a dictionary."""
     metadata_raw_len = len(metadata_raw) if metadata_raw else 0
     logger.info("main._parse_metadata started call_id=%s metadata_raw_len=%s", call_id, metadata_raw_len)
@@ -241,7 +241,7 @@ async def _save_upload_to_file(upload: UploadFile, destination: Path, max_size_b
     )
 
 
-def _pick_call_id(call_id: str | None, filename: str | None) -> str:
+def _pick_call_id(call_id: Optional[str], filename: Optional[str]) -> str:
     """Resolve call id from explicit value, filename stem, or random UUID."""
     logger.debug("main._pick_call_id started call_id=%s filename=%s", call_id, filename)
     if call_id and call_id.strip():
@@ -259,7 +259,7 @@ def _pick_call_id(call_id: str | None, filename: str | None) -> str:
 
 
 def _auth_guard(
-    credentials: HTTPAuthorizationCredentials | None = Depends(security),
+    credentials: Optional[HTTPAuthorizationCredentials] = Depends(security),
     settings: Settings = Depends(get_settings),
 ) -> None:
     """Validate Bearer token for protected endpoints."""
@@ -312,8 +312,8 @@ async def process_call(
     request: Request,
     _auth: None = Depends(_auth_guard),
     file: UploadFile = File(...),
-    call_id: str | None = Form(default=None),
-    metadata: str | None = Form(default=None),
+    call_id: Optional[str] = Form(default=None),
+    metadata: Optional[str] = Form(default=None),
     return_transcript_segments: bool = Form(default=False),
     include_extras: bool = Form(default=True),
     settings: Settings = Depends(get_settings),
