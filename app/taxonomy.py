@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import logging
 from pathlib import Path
-from typing import Literal
+from typing import Literal, Optional
 
 import yaml
 from pydantic import BaseModel, Field
@@ -17,6 +17,7 @@ logger = logging.getLogger("calls_category_api.taxonomy")
 class Category(BaseModel):
     """Single classification category definition."""
 
+    id: int = Field(ge=1)
     key: str
     name: str
     definition: str
@@ -28,6 +29,7 @@ class Taxonomy(BaseModel):
     """Collection of categories and convenience methods for prompt generation."""
 
     version: str
+    caller_type_ids: dict[Literal["NATURAL", "JURIDICAL"], int]
     categories: list[Category]
 
     @property
@@ -47,6 +49,19 @@ class Taxonomy(BaseModel):
             for category in self.categories
             if caller_type in category.caller_types
         }
+
+    def category_id_for_key(self, key: str) -> Optional[int]:
+        """Return category id for a taxonomy key."""
+        for category in self.categories:
+            if category.key == key:
+                return category.id
+        return None
+
+    def caller_type_id_for(self, caller_type: Literal["NATURAL", "JURIDICAL", "UNKNOWN"]) -> Optional[int]:
+        """Return DB id for caller type when available."""
+        if caller_type == "UNKNOWN":
+            return None
+        return self.caller_type_ids.get(caller_type)
 
     def prompt_block_for_caller_type(self, caller_type: Literal["NATURAL", "JURIDICAL"]) -> str:
         """Build prompt text listing categories for one caller type."""
@@ -92,12 +107,21 @@ def load_taxonomy(path: Path) -> Taxonomy:
     if len(keys) != len(set(keys)):
         raise ProcessingError("taxonomy_invalid", "Category keys in taxonomy must be unique")
 
+    ids = [category.id for category in taxonomy.categories]
+    if len(ids) != len(set(ids)):
+        raise ProcessingError("taxonomy_invalid", "Category ids in taxonomy must be unique")
+
     missing_types = [category.key for category in taxonomy.categories if not category.caller_types]
     if missing_types:
         raise ProcessingError(
             "taxonomy_invalid",
             "Each category must include at least one caller type",
         )
+
+    missing_caller_type_ids = {caller_type for caller_type in ("NATURAL", "JURIDICAL") if caller_type not in taxonomy.caller_type_ids}
+    if missing_caller_type_ids:
+        missing = ", ".join(sorted(missing_caller_type_ids))
+        raise ProcessingError("taxonomy_invalid", f"Missing caller_type_ids for: {missing}")
 
     logger.info(
         "taxonomy.load_taxonomy completed version=%s categories=%s natural=%s juridical=%s",

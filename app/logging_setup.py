@@ -16,7 +16,8 @@ _configured = False
 
 def _resolve_log_level(level_name: str) -> int:
     """Resolve a string log level into a `logging` numeric constant."""
-    return getattr(logging, level_name.upper(), logging.DEBUG)
+    cleaned_level = level_name.split("#", 1)[0].strip().split()[0] if level_name.strip() else ""
+    return getattr(logging, cleaned_level.upper(), logging.DEBUG)
 
 
 def configure_logging(settings: Settings) -> None:

@@ -54,8 +54,10 @@ class ClassificationResult(BaseModel):
     """Primary classification output for caller and category."""
 
     caller_type: Literal["NATURAL", "JURIDICAL", "UNKNOWN"]
+    caller_type_id: Optional[int] = Field(default=None, ge=1)
     caller_type_confidence: float = Field(ge=0, le=1)
     call_category: str
+    call_category_id: int = Field(ge=1)
     call_category_confidence: float = Field(ge=0, le=1)
     extras: Optional[ClassificationExtras] = None
     model: str

@@ -147,6 +147,14 @@ AZURE_OPENAI_API_KEY=replace-me
 AZURE_OPENAI_DEPLOYMENT=gpt-4o
 AZURE_OPENAI_API_VERSION=2024-02-15-preview
 
+# Optional. Set these only if the server must use a corporate outbound proxy.
+HTTP_PROXY=http://proxy.example.local:3128
+HTTPS_PROXY=http://proxy.example.local:3128
+NO_PROXY=127.0.0.1,localhost,.example.local
+http_proxy=http://proxy.example.local:3128
+https_proxy=http://proxy.example.local:3128
+no_proxy=127.0.0.1,localhost,.example.local
+
 API_BEARER_TOKEN=replace-with-long-random-secret
 
 MAX_UPLOAD_MB=25
@@ -181,6 +189,7 @@ Important notes:
 - set `ENABLE_FFMPEG=false` only if you intentionally want to bypass normalization
 - if `ffmpeg` is not installed, you can still leave `FFMPEG_BINARY=/usr/bin/ffmpeg`; the app will warn and skip normalization
 - for your original call format, direct processing works when the WAV is mono PCM16 at `8kHz` or `16kHz`
+- if your server reaches the internet only through a proxy, set the `HTTP_PROXY` / `HTTPS_PROXY` / `NO_PROXY` values here before starting the service
 
 Protect the environment file:
 
@@ -211,10 +220,6 @@ User=callsapi
 Group=callsapi
 WorkingDirectory=/opt/calls_category_api
 EnvironmentFile=/etc/calls-category-api/calls-category-api.env
-Environment="HTTP_PROXY=http://proxy.ubank.local:3128"
-Environment="HTTPS_PROXY=http://proxy.ubank.local:3128"
-Environment="http_proxy=http://proxy.ubank.local:3128"
-Environment="https_proxy=http://proxy.ubank.local:3128"
 ExecStart=/opt/calls_category_api/.venv/bin/uvicorn app.main:app --host 127.0.0.1 --port 8000 --workers 1 --proxy-headers --forwarded-allow-ips=127.0.0.1
 Restart=always
 RestartSec=5
@@ -230,6 +235,8 @@ LimitNOFILE=65535
 [Install]
 WantedBy=multi-user.target
 ```
+
+The service reads all application settings, including optional proxy variables, from `/etc/calls-category-api/calls-category-api.env`.
 
 Reload systemd:
 #TODO end here!!!

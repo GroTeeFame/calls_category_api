@@ -153,10 +153,18 @@ class ClassificationService:
             parsed.caller_type_confidence,
             parsed.call_category_confidence,
         )
+        call_category_id = self.taxonomy.category_id_for_key(parsed.call_category)
+        if call_category_id is None:
+            raise ProcessingError(
+                "classification_mapping_failed",
+                f"No taxonomy id configured for call_category '{parsed.call_category}'",
+            )
         return ClassificationResult(
             caller_type=parsed.caller_type,
+            caller_type_id=self.taxonomy.caller_type_id_for(parsed.caller_type),
             caller_type_confidence=parsed.caller_type_confidence,
             call_category=parsed.call_category,
+            call_category_id=call_category_id,
             call_category_confidence=parsed.call_category_confidence,
             extras=ClassificationExtras.model_validate(parsed.extras.model_dump()) if parsed.extras else None,
             model=getattr(response, "model", self.deployment),
@@ -176,6 +184,8 @@ class ClassificationService:
             api_key=self.api_key,
             api_version=self.api_version,
             azure_endpoint=self.endpoint,
+            timeout=self.timeout_seconds,
+            max_retries=0,
         )
         logger.info("classifier._create_client completed")
         return client

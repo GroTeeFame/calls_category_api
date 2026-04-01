@@ -70,7 +70,7 @@ Request fields:
 Response (200):
 - `call_id`
 - `transcription` (`text`, optional `segments`, optional `detected_languages`, `stt_metadata`)
-- `classification` (`caller_type`, `call_category`, confidences, optional `extras`, `model`, `prompt_version`)
+- `classification` (`caller_type`, `caller_type_id`, `call_category`, `call_category_id`, confidences, optional `extras`, `model`, `prompt_version`)
 - `timings_ms` (`normalize`, `stt`, `clf`, `total`)
 
 Error shape:
