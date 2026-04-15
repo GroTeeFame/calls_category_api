@@ -212,6 +212,9 @@ class ClassificationService:
             "- caller_type_confidence and call_category_confidence must be numbers in [0,1].\n"
             f"- {extras_instruction}\n"
             "- If uncertain, prefer UNKNOWN and lower confidence.\n"
+            "- Do not classify by the final routing action alone (for example 'connect to manager' or 'transfer to specialist') if the substantive issue is already stated.\n"
+            "- For JURIDICAL calls, choose 'Консультація з питань Ebanking' when the topic is corporate internet banking / client-bank / IB operations such as creating, editing, signing, sending, recalling, correcting, or clarifying payments, payroll statements, registers, beneficiaries, statuses, imports, or access.\n"
+            "- For JURIDICAL calls, do not choose 'Кредити' unless the call explicitly discusses a loan/credit product, credit line, debt, repayment, interest, collateral, or restructuring.\n"
         )
         user_prompt = (
             f"prompt_version: {self.prompt_version}\n"
